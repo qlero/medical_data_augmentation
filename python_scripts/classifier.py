@@ -16,12 +16,15 @@ Citations:
     > International Symposium on Biomedical Imaging (ISBI), 2021.
 
 """
+import matplotlib.pyplot as plt
 import medmnist
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
 from medmnist import Evaluator
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from tqdm import tqdm
 
 class CNN(nn.Module):
     """
@@ -29,7 +32,7 @@ class CNN(nn.Module):
     simple binary or multi-class classification.
     """
     def __init__(self, in_channels, num_classes):
-        super(Net, self).__init__()
+        super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
             nn.Conv2d(in_channels, 16, kernel_size=3),
             nn.BatchNorm2d(16),
@@ -73,9 +76,10 @@ class classification():
     Defines a machine learning classification pipeline using
     the CNN network previously declared.
     """
-    def __init__(self, n_channels, n_classes, task, learning_rate):
+    def __init__(self, n_channels, n_classes, task, learning_rate, name):
         # Defines the pipeline model
         self.model = CNN(in_channels=n_channels, num_classes=n_classes)
+        self.data_flag = name
         # Defines the loss function and optimizer
         if task == "multi-label, binary-class": 
             self.criterion = nn.BCEWithLogitsLoss()
@@ -90,20 +94,21 @@ class classification():
         # Defines a list holder for the epoch accuracies for each
         # epoch of a training process
         self.accuracy_per_epoch = []
-    def train(train_loader, epochs=3):
+    def train(self, train_loader, val_loader, epochs=3):
         """
         Runs the training phase for the loaded model for a given
         data loader and a given number of epochs
         """
         for epoch in range(epochs):
+            print(f"===================\nEpoch {epoch}\n")
             train_correct = 0
             train_total = 0
             self.model.train()
             for inputs, targets in tqdm(train_loader):
                 # Performs the forward + backward + optimize passes
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 outputs = self.model(inputs)
-                if task == "multi-label, binary-class":
+                if self.task == "multi-label, binary-class":
                     targets = targets.to(torch.float32)
                 else:
                     targets = targets.squeeze().long()
@@ -116,22 +121,24 @@ class classification():
             # Computes the epoch accuracies
             acc = train_correct.item()/train_total
             self.accuracy_per_epoch.append(acc)
-            print(f"Epoch {epoch} train. accuracy: {round(acc,2)}")
+            print(f"train -- accuracy: {round(acc,2)}")
+            self.test(val_loader, split = "val")
         # Records that the train phase was done
         self.training_done=True
-    def test(test_loader, name_loader = "test"):
+        print("===================")
+    def test(self, test_loader, label_names = None, split = "test",
+             display_confusion_matrix=False):
         """
         Runs the test phase for the trained model.
         """
         self.model.eval()
-        test_correct = torch.tensor([])
-        test_score = torch.tensor([])
+        y_true = torch.tensor([])
+        y_score = torch.tensor([])
         # Computes for the whole given data loader, the corresponding
         # accuracy with the previously trained model.
         with torch.no_grad():
             for inputs, targets in test_loader:
                 outputs = self.model(inputs)
-
                 if self.task == 'multi-label, binary-class':
                     targets = targets.to(torch.float32)
                     outputs = outputs.softmax(dim=-1)
@@ -141,34 +148,29 @@ class classification():
                     targets = targets.float().resize_(len(targets), 1)
                 y_true = torch.cat((y_true, targets), 0)
                 y_score = torch.cat((y_score, outputs), 0)
+            y_preds = torch.argmax(y_score, 1)
             y_true = y_true.numpy()
             y_score = y_score.detach().numpy()
-            evaluator = Evaluator(data_flag, split)
+            evaluator = Evaluator(self.data_flag, split)
             metrics = evaluator.evaluate(y_score)
-            print("== Evaluating model ==")
-            print(f"{name_loader} -- accuracy: {round(metrics[0],2)}, ",
+        if display_confusion_matrix:
+            print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
                   f"AUC: {round(metrics[1], 2)}")
-        
-        
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+            cm = confusion_matrix(y_true.tolist(), 
+                                  y_preds.tolist())
+            if label_names is None:
+                disp = ConfusionMatrixDisplay(
+                    confusion_matrix=cm
+                )
+            else:
+                disp = ConfusionMatrixDisplay(
+                    confusion_matrix=cm,
+                    display_labels=label_names
+                )
+            plt.figure(figsize=(10,10))
+            plt.xticks(rotation=90)
+            disp.plot()
+            plt.show()
+        else:
+            print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
+                  f"AUC: {round(metrics[1], 2)}")
