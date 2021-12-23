@@ -168,8 +168,8 @@ class classification():
                     display_labels=label_names
                 )
             plt.figure(figsize=(10,10))
-            plt.xticks(rotation=90)
             disp.plot()
+            plt.xticks(rotation=90)
             plt.show()
         else:
             print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
