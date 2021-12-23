@@ -1,8 +1,8 @@
 """
 
-This .py file contains the classes <CNN> and <classification>
-adapted from the notebook getting_started found in the /examples/ 
-subfolder in:
+This .py file contains the classes <CNN> and <classification>, and the
+function <run_classifier_pipeline> adapted from the notebook getting_started 
+found in the /examples/ subfolder in:
     > https://github.com/MedMNIST/MedMNIST/
 
 Citations:
@@ -16,6 +16,8 @@ Citations:
     > International Symposium on Biomedical Imaging (ISBI), 2021.
 
 """
+
+import json
 import matplotlib.pyplot as plt
 import medmnist
 import torch
@@ -174,3 +176,34 @@ class classification():
         else:
             print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
                   f"AUC: {round(metrics[1], 2)}")
+            
+def run_classifier_pipeline(name, info_flags, imported_data,
+                            learning_rate=0.01, epochs=5):
+    """
+    Runs the training and testing process for the classifier 
+    declared above.
+    """
+    # Prints the description of the dataset
+    info = info_flags[name][0]
+    print(json.dumps(info, sort_keys=False, indent=2))
+    # Declares the model
+    clf = classification(
+        n_channels=info["n_channels"],
+        n_classes=len(info["label"]),
+        task=len(info["task"]),
+        learning_rate=learning_rate, 
+        name=name
+    )
+    # Runs the training phase
+    clf.train(
+        train_loader=imported_data[3], 
+        val_loader=imported_data[5], 
+        epochs=epochs
+    )
+    # Runs the testing phase
+    clf.test(
+        test_loader=imported_data[4], 
+        label_names=info["label"].values(), 
+        display_confusion_matrix=True
+    )
+    return clf
