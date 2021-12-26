@@ -4,6 +4,11 @@
 
 """
 
+##############################
+########## IMPORTS ###########
+##############################
+
+import os 
 import torch
 import torch.utils.data
 from torch import nn, optim
@@ -12,7 +17,12 @@ from torchvision import datasets, transforms
 from torchvision.utils import save_image
 
 # cuda setup
+global device 
 device = torch.device("cuda")
+
+##############################
+########## CLASSES ###########
+##############################
 
 class ConditionalVAE(nn.Module):
     """
@@ -45,8 +55,10 @@ class ConditionalVAE(nn.Module):
             )
             in_channels=dim
         # Declares the hidden layers of the CVAE decoder (Convolutional + FC)
-        self.decoder_input = nn.Linear(latent_dims + n_classes, 
-                                       self.hidden_layer_dimensions[-1]*self.fc_factor)
+        self.decoder_input = nn.Linear(
+            latent_dims + n_classes,
+            self.hidden_layer_dimensions[-1]*self.fc_factor
+        )
         decoder_modules = []
         for layer in range(len(self.hidden_layer_dimensions)-1,0,-1):
             decoder_modules.append(
@@ -107,7 +119,9 @@ class ConditionalVAE(nn.Module):
         self.fc_var = nn.Linear(self.hidden_layer_dimensions[-1], latent_dims)
         # Sets up the embedding input for the encoder
         self.class_embedding = nn.Linear(n_classes, img_size*img_size)
-        self.data_embedding = nn.Conv2d(self.channel_size, self.channel_size, kernel_size=1)
+        self.data_embedding = nn.Conv2d(
+            self.channel_size, self.channel_size, kernel_size=1
+        )
     def decode(self, to_decode):
         """
         Decodes an input entry (z) by casting it up the decoder network
@@ -157,16 +171,18 @@ class ConditionalVAE(nn.Module):
         """
         kld_weight = 0.005
         recons_loss = F.mse_loss(recons, x, reduction="sum")
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + var - mu ** 2 - var.exp(), dim = 1), dim = 0)
+        kld_loss = torch.mean(-0.5 * torch.sum(
+            1 + var - mu ** 2 - var.exp(), dim = 1
+        ), dim = 0)
         loss = recons_loss + kld_weight * kld_loss
         return {'loss': loss, 'Reconstruction_Loss':recons_loss, 'KLD':-kld_loss}
-    def sample(self, num_samples, current_device, y):
+    def sample(self, num_samples, y):
         """
         Samples from the latent space and return the corresponding
         image space map.
         """
-        z = torch.randn(num_samples, self.latent_dim)
-        z = z.to(current_device)
+        z = torch.randn(num_samples, self.latent_dimensions)
+        z = z.to(device)
         z = torch.cat([z, y.float()], dim=1)
         samples = self.decode(z)
         return samples
@@ -176,7 +192,6 @@ class ConditionalVAE(nn.Module):
         """
         return self.forward(x, y)[0]
 
-
 class TestCVAE():
     """
     Implementation of a Conditional Variational Autoencoder test inspired from
@@ -184,16 +199,129 @@ class TestCVAE():
     > https://github.com/unnir/cVAE
     > https://github.com/AntixK/PyTorch-VAE
     """
-    def setUp(self) -> None:
-        self.model = ConditionalVAE(3, 10, 10)
+    def __init__(self, n_channels, n_classes, latent_dims):
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.latent_dims = latent_dims
+        self.model = ConditionalVAE(n_channels, n_classes, latent_dims)
     def test_forward(self):
-        x = torch.randn(2, 3, 28, 28)
-        c = torch.randn(2, 10)
+        x = torch.randn(10, self.n_channels, 28, 28)
+        c = torch.randn(10, self.n_classes)
         y = self.model(x, c)
         print("Model Output size:", y[0].size())
+        return True
     def test_loss(self):
-        x = torch.randn(2, 3, 28, 28)
-        c = torch.randn(2, 10)
+        x = torch.randn(10, self.n_channels, 28, 28)
+        c = torch.randn(10, self.n_classes)
         result = self.model(x, c)
         loss = self.model.loss_function(*result)
-        print(loss)   
+        print(loss)
+        return True
+
+##############################
+######### FUNCTIONS ##########
+##############################
+    
+def one_hot(labels, class_size):
+    """
+    Implements a one-hot encoding function for categorical labels.
+    """
+    targets = torch.zeros(labels.size(0), class_size)
+    for i, label in enumerate(labels):
+        targets[i, label] = 1
+    return targets.to(device)
+    
+def model_evaluate(model, loader, epoch, n_classes, n_channels, target_folder,
+                   eval_step = "Validation",
+                   print_reconstruction=False):
+    """
+    Evaluates a model over a validation or test loader
+    """
+    model.eval()
+    eval_loss = 0
+    with torch.no_grad():
+        for batch_idx, (data, labels) in enumerate(loader):
+            data, labels = data.to(device), labels.to(device)
+            labels = one_hot(labels, n_classes)
+            recon_batch, _, mu, var = model(data, labels)
+            loss = model.loss_function(recon_batch, data, mu, var)["loss"]
+            eval_loss += loss.detach().cpu().numpy()
+            if batch_idx == 0 and print_reconstruction:
+                n = min(data.size(0), 5)
+                comparison = torch.cat(
+                    [data[:n], recon_batch.view(-1, n_channels, 28, 28)[:n]]
+                )
+                save_image(comparison.cpu(), 
+                           f"{target_folder}/epoch{epoch}_reconstruction.png",
+                           nrow=n)
+    eval_loss /= len(loader.dataset)
+    print(f"{eval_step} set loss: {round(eval_loss,6)}")
+    return model    
+    
+def model_train(model, optimizer, train_loader, epoch, n_classes):
+    """
+    Performs a single forward and backward pass of a given model.
+    """
+    length_dataset = len(train_loader.dataset)
+    model.train()
+    train_loss = 0
+    for batch_idx, (data, labels) in enumerate(train_loader):
+        data, labels = data.to(device), labels.to(device)
+        labels = one_hot(labels, n_classes)
+        recon_batch, _, mu, var = model(data, labels)
+        optimizer.zero_grad()
+        loss = model.loss_function(recon_batch, data, mu, var)["loss"]
+        loss.backward()
+        train_loss += loss.detach().cpu().numpy()
+        optimizer.step()
+        if batch_idx % 10 == 0:
+            print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
+                  f"\tLoss: {round(loss.item()/len(data),6)}")
+    print(f"Train epoch {epoch} -- average loss: {train_loss/length_dataset}")
+    return model, optimizer
+
+def run_encoder_pipeline(train_loader, val_loader, test_loader, 
+                         n_channels, n_classes, latent_dims, 
+                         epochs, target_folder, learning_rate=1e-3,
+                         output_intermediary_images=False):
+    """
+    Runs the training and testing process for the conditional variational
+    autoencoder declared above.
+    """
+    print("===================","\nTesting Conditional Variational Autoencoder:")
+    model = TestCVAE(n_channels, n_classes, latent_dims)
+    print("Forward pass test: ", model.test_forward())
+    print("Loss test: ", model.test_loss())
+    print("Cuda device: ", device)
+    print("===================","\nTraining phase:")
+    model = ConditionalVAE(n_channels, n_classes, latent_dims).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    if target_folder not in os.listdir() and output_intermediary_images: 
+        os.mkdir(target_folder)
+    for epoch in range(1, epochs+1):
+        # Trains
+        model, optimizer = model_train(
+            model, optimizer, train_loader, epoch, n_classes
+        )
+        # Evaluates on validation set
+        model = model_evaluate(
+            model, val_loader, epoch, n_classes, n_channels, target_folder,
+            print_reconstruction = output_intermediary_images
+        )
+        if output_intermediary_images:
+            with torch.no_grad():
+                c = torch.eye(n_classes, n_classes).cuda()
+                sample = torch.randn(n_classes, latent_dims).to(device)
+                sample = torch.cat([sample, c], dim=1)
+                sample = model.decode(sample).cpu()
+                save_image(sample.view(n_classes, n_channels, 28, 28),
+                           f"{target_folder}/epoch{epoch}_sample.png")
+    print("===================","\nTesting phase:")
+    model = model_evaluate(
+        model, test_loader, epoch, n_classes, n_channels, target_folder,
+        eval_step="Test", print_reconstruction = output_intermediary_images
+    )
+    return model
+    
+    
+    

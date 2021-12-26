@@ -17,6 +17,10 @@ Citations:
 
 """
 
+##############################
+########## IMPORTS ###########
+##############################
+
 import json
 import matplotlib.pyplot as plt
 import medmnist
@@ -27,6 +31,10 @@ import torch.optim as optim
 from medmnist import Evaluator
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from tqdm import tqdm
+
+##############################
+########## CLASSES ###########
+##############################
 
 class CNN(nn.Module):
     """
@@ -176,6 +184,10 @@ class classification():
         else:
             print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
                   f"AUC: {round(metrics[1], 2)}")
+
+##############################
+######### FUNCTIONS ##########
+##############################
             
 def run_classifier_pipeline(name, info_flags, imported_data,
                             learning_rate=0.01, epochs=5):
