@@ -110,7 +110,7 @@ class ConditionalVAE(nn.Module):
                 nn.LeakyReLU(),
                 nn.Conv2d(
                     self.hidden_layer_dimensions[0],
-                    out_channels=3,
+                    out_channels=self.channel_size,
                     kernel_size=3,
                     padding=0,
                     stride=1
@@ -318,6 +318,7 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     validation_check = float("inf")
     validation_counter = 0
     model_to_save = None
+    save_epoch = 1
     # Creates a dedicated folder for intermediary image saves to show
     # the evolution of sampling from a latent space and reconstruction
     # if indicated at function run
@@ -341,6 +342,7 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
         if val_loss < validation_check:
             validation_check = val_loss
             validation_counter = 0
+            save_epoch = epoch
             model_to_save = model
         else:
             validation_counter += 1
@@ -360,11 +362,16 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     print("===================","\nTesting phase:")
     if model_to_save is None:
         model_to_save = model
+        save_epoch = 200
     model, test_loss = model_evaluate(
         model_to_save, test_loader, epoch, n_classes, n_channels, target_folder,
         eval_step="Test", print_reconstruction = output_intermediary_info
     )
+    # Prints the training and validation convergence
     print_loss_convergence(training_losses, validation_losses, test_loss)
+    # Saves the model
+    torch.save(model.state_dict(),
+               f"{target_folder}/{target_folder}_model_epoch{save_epoch}.pth")
     return model, training_losses, validation_losses, test_loss
     
     
