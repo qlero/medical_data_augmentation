@@ -1,8 +1,8 @@
 """
 
 This .py file contains the classes <CNN> and <classification>, and the
-function <run_classifier_pipeline> adapted from the notebook getting_started 
-found in the /examples/ subfolder in:
+function <run_classifier_pipeline> inspired in part from the notebook 
+getting_started.ipynb found in the /examples/ subfolder in:
     > https://github.com/MedMNIST/MedMNIST/
 
 Citations:

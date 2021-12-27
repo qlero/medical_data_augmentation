@@ -1,6 +1,13 @@
 """
 
+This .py file contains the classes <ConditionalVAE> and <TestCVAE>, and the
+functions <one_hot>, <model_evaluate>, <model_train>, and <run_classifier_pipeline> 
+inspired in part from the following repositories:
+    > https://github.com/AntixK/PyTorch-VAE
+    > https://github.com/unnir/cVAE
 
+Citations:
+    > Subramanian, A.K, PyTorch-VAE,2020,GitHub, GitHub repository
 
 """
 
@@ -8,9 +15,11 @@
 ########## IMPORTS ###########
 ##############################
 
+import matplotlib.pyplot as plt
 import os 
 import torch
 import torch.utils.data
+
 from torch import nn, optim
 from torch.nn import functional as F
 from torchvision import datasets, transforms
@@ -26,10 +35,7 @@ device = torch.device("cuda")
 
 class ConditionalVAE(nn.Module):
     """
-    Implementation of a Conditional Variational Autoencoder inspired from
-    the following implementations:
-    > https://github.com/unnir/cVAE
-    > https://github.com/AntixK/PyTorch-VAE
+    Implementation of a Conditional Variational Autoencoder.
     """
     def __init__(self, in_channels, n_classes, latent_dims, 
                  hidden_dims=[32, 64, 128, 256, 512], img_size=28):
@@ -194,10 +200,7 @@ class ConditionalVAE(nn.Module):
 
 class TestCVAE():
     """
-    Implementation of a Conditional Variational Autoencoder test inspired from
-    the following implementations:
-    > https://github.com/unnir/cVAE
-    > https://github.com/AntixK/PyTorch-VAE
+    Implementation of a Conditional Variational Autoencoder test.
     """
     def __init__(self, n_channels, n_classes, latent_dims):
         self.n_channels = n_channels
@@ -230,6 +233,28 @@ def one_hot(labels, class_size):
     for i, label in enumerate(labels):
         targets[i, label] = 1
     return targets.to(device)
+ 
+def model_train(model, optimizer, train_loader, epoch, n_classes):
+    """
+    Performs a single forward and backward pass of a given model.
+    """
+    length_dataset = len(train_loader.dataset)
+    model.train()
+    train_loss = 0
+    for batch_idx, (data, labels) in enumerate(train_loader):
+        data, labels = data.to(device), labels.to(device)
+        labels = one_hot(labels, n_classes)
+        recon_batch, _, mu, var = model(data, labels)
+        optimizer.zero_grad()
+        loss = model.loss_function(recon_batch, data, mu, var)["loss"]
+        loss.backward()
+        train_loss += loss.detach().cpu().numpy()
+        optimizer.step()
+        if batch_idx % 10 == 0:
+            print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
+                  f"\tLoss: {round(loss.item()/len(data),6)}")
+    print(f"Train epoch {epoch} -- average loss: {train_loss/length_dataset}")
+    return model, optimizer, train_loss/length_dataset
     
 def model_evaluate(model, loader, epoch, n_classes, n_channels, target_folder,
                    eval_step = "Validation",
@@ -256,34 +281,24 @@ def model_evaluate(model, loader, epoch, n_classes, n_channels, target_folder,
                            nrow=n)
     eval_loss /= len(loader.dataset)
     print(f"{eval_step} set loss: {round(eval_loss,6)}")
-    return model    
-    
-def model_train(model, optimizer, train_loader, epoch, n_classes):
+    return model, eval_loss
+
+def print_loss_convergence(training_losses, validation_losses, test_loss):
     """
-    Performs a single forward and backward pass of a given model.
+    Prints the convergence plot of the training and validation losses.
     """
-    length_dataset = len(train_loader.dataset)
-    model.train()
-    train_loss = 0
-    for batch_idx, (data, labels) in enumerate(train_loader):
-        data, labels = data.to(device), labels.to(device)
-        labels = one_hot(labels, n_classes)
-        recon_batch, _, mu, var = model(data, labels)
-        optimizer.zero_grad()
-        loss = model.loss_function(recon_batch, data, mu, var)["loss"]
-        loss.backward()
-        train_loss += loss.detach().cpu().numpy()
-        optimizer.step()
-        if batch_idx % 10 == 0:
-            print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
-                  f"\tLoss: {round(loss.item()/len(data),6)}")
-    print(f"Train epoch {epoch} -- average loss: {train_loss/length_dataset}")
-    return model, optimizer
+    plt.figure(figsize=(10, 5))
+    plt.plot(training_losses)
+    plt.plot(validation_losses)
+    plt.plot(len(training_losses)-1,test_loss,'ro')
+    plt.title("Training & Validation Losses")
+    plt.legend(["Training loss", "Validation loss", "Test loss (at last epoch/early stop)"])
+    plt.show()
 
 def run_encoder_pipeline(train_loader, val_loader, test_loader, 
                          n_channels, n_classes, latent_dims, 
                          epochs, target_folder, learning_rate=1e-3,
-                         output_intermediary_images=False):
+                         output_intermediary_info=False):
     """
     Runs the training and testing process for the conditional variational
     autoencoder declared above.
@@ -294,21 +309,47 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     print("Loss test: ", model.test_loss())
     print("Cuda device: ", device)
     print("===================","\nTraining phase:")
+    # Declares the model and optimizer
     model = ConditionalVAE(n_channels, n_classes, latent_dims).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    if target_folder not in os.listdir() and output_intermediary_images: 
+    # Declares intermediary placeholders
+    training_losses = []
+    validation_losses = []
+    validation_check = float("inf")
+    validation_counter = 0
+    model_to_save = None
+    # Creates a dedicated folder for intermediary image saves to show
+    # the evolution of sampling from a latent space and reconstruction
+    # if indicated at function run
+    if target_folder not in os.listdir() and output_intermediary_info: 
         os.mkdir(target_folder)
     for epoch in range(1, epochs+1):
         # Trains
-        model, optimizer = model_train(
+        model, optimizer, train_loss = model_train(
             model, optimizer, train_loader, epoch, n_classes
         )
         # Evaluates on validation set
-        model = model_evaluate(
+        model, val_loss = model_evaluate(
             model, val_loader, epoch, n_classes, n_channels, target_folder,
-            print_reconstruction = output_intermediary_images
+            print_reconstruction = output_intermediary_info
         )
-        if output_intermediary_images:
+        # Records the losses
+        training_losses.append(train_loss)
+        validation_losses.append(val_loss)
+        # Checks if there has been improvement in the validation loss
+        # to perform early stopping
+        if val_loss < validation_check:
+            validation_check = val_loss
+            validation_counter = 0
+            model_to_save = model
+        else:
+            validation_counter += 1
+        if validation_counter >= 5:
+            print("==/!\== EARLY STOPPING: no validation loss",
+                  "improvement over the past 5 epochs")
+            break
+        # Computes sampled images from the latent space if indicated
+        if output_intermediary_info:
             with torch.no_grad():
                 c = torch.eye(n_classes, n_classes).cuda()
                 sample = torch.randn(n_classes, latent_dims).to(device)
@@ -317,11 +358,14 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
                 save_image(sample.view(n_classes, n_channels, 28, 28),
                            f"{target_folder}/epoch{epoch}_sample.png")
     print("===================","\nTesting phase:")
-    model = model_evaluate(
-        model, test_loader, epoch, n_classes, n_channels, target_folder,
-        eval_step="Test", print_reconstruction = output_intermediary_images
+    if model_to_save is None:
+        model_to_save = model
+    model, test_loss = model_evaluate(
+        model_to_save, test_loader, epoch, n_classes, n_channels, target_folder,
+        eval_step="Test", print_reconstruction = output_intermediary_info
     )
-    return model
+    print_loss_convergence(training_losses, validation_losses, test_loss)
+    return model, training_losses, validation_losses, test_loss
     
     
     
