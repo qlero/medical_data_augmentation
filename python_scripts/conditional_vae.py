@@ -234,7 +234,8 @@ def one_hot(labels, class_size):
         targets[i, label] = 1
     return targets.to(device)
  
-def model_train(model, optimizer, train_loader, epoch, n_classes):
+def model_train(model, optimizer, train_loader, epoch, n_classes, 
+                print_batch_loss=False):
     """
     Performs a single forward and backward pass of a given model.
     """
@@ -250,7 +251,7 @@ def model_train(model, optimizer, train_loader, epoch, n_classes):
         loss.backward()
         train_loss += loss.detach().cpu().numpy()
         optimizer.step()
-        if batch_idx % 10 == 0:
+        if batch_idx % 10 == 0 and print_batch_loss:
             print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
                   f"\tLoss: {round(loss.item()/len(data),6)}")
     print(f"Train epoch {epoch} -- average loss: {train_loss/length_dataset}")
@@ -305,6 +306,8 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     """
     print("===================","\nTesting Conditional Variational Autoencoder:")
     model = TestCVAE(n_channels, n_classes, latent_dims)
+    print("Clearing CUDA Pytorch Cache")
+    torch.cuda.empty_cache()
     print("Forward pass test: ", model.test_forward())
     print("Loss test: ", model.test_loss())
     print("Cuda device: ", device)
@@ -327,7 +330,8 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     for epoch in range(1, epochs+1):
         # Trains
         model, optimizer, train_loss = model_train(
-            model, optimizer, train_loader, epoch, n_classes
+            model, optimizer, train_loader, epoch, n_classes,
+            output_intermediary_info
         )
         # Evaluates on validation set
         model, val_loss = model_evaluate(
