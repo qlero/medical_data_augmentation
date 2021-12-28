@@ -20,6 +20,11 @@ Citations:
     
 """
 
+##############################
+########## IMPORTS ###########
+##############################
+
+import gc
 import matplotlib.pyplot as plt
 import medmnist
 import numpy as np
@@ -27,9 +32,40 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
+from .conditional_vae import ConditionalVAE, one_hot
 from collections import Counter
 from IPython.display import Image 
 from medmnist import INFO, Evaluator
+
+##############################
+########## CLASSES ###########
+##############################
+
+class MyDataset(data.Dataset):
+    """
+    Custom Dataset class to allow for data transforms.
+    """
+    def __init__(self, X, y, transform=None):
+        self.data = X
+        self.target = y
+        self.transform = transform
+        
+    def __getitem__(self, index):
+        x = self.data[index]
+        y = self.target[index]
+
+        # Normalize your data here
+        if self.transform:
+            x = self.transform(x)
+
+        return x, y
+    
+    def __len__(self):
+        return len(self.data)
+
+##############################
+######### FUNCTIONS ##########
+##############################
 
 def check_cuda_availability():
     """
@@ -133,6 +169,58 @@ def display_set_statistics(datasets, dataset_info, name):
     plt.xticks(rotation=90)
     plt.show()
 
+def generate_augmented_dataset(n_channels, n_classes, latent_dims, 
+                               model_path, 
+                               original_train_set, batch_size,
+                               test_loader, val_loader, n_sampling=None,
+                               weighted_sampling=False):
+    """
+    Generates an augmented training set for a classifier task.
+    """
+    data_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[.5], std=[.5])
+    ])
+    # Loads conditional VAE model
+    with torch.no_grad():
+        model = ConditionalVAE(n_channels, n_classes, latent_dims).cuda()
+        model.load_state_dict(torch.load(model_path))
+        # Generates new images with their labels
+        if weighted_sampling:
+            classes_counter = Counter([x[0] for x in original_train_set.labels])
+            max_nb_elements = max(classes_counter.values())
+            weighted_counter = {k:(abs(v-max_nb_elements)+100) 
+                                for k,v in classes_counter.items()}
+            weighted_counter = {k:v/sum(weighted_counter.values()) 
+                                for k,v in weighted_counter.items()}
+            labels = np.random.choice(list(range(n_classes)),
+                                 n_sampling,
+                                 p=list(weighted_counter.values()))
+        else:
+            labels = np.random.randint(0, n_classes, n_sampling)
+        images = model.sample(
+            n_sampling,
+            one_hot(torch.tensor(labels).int(),n_classes).cuda()
+        ).detach().cpu()
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+    # Generates the augmented dataset
+    #for entry in original_train_set:
+    old_labels = np.array([x[0] for x in original_train_set.labels])
+    new_dataset = data.TensorDataset(images, torch.Tensor(labels).int())
+    old_dataset = MyDataset(original_train_set.imgs, 
+                            torch.Tensor(old_labels).int(), 
+                            transform=data_transform)
+    new_dataset = data.ConcatDataset([new_dataset, old_dataset])
+    # Encapsulates data into dataloader form
+    train_loader = data.DataLoader(
+        dataset=new_dataset,
+        batch_size=batch_size,
+        shuffle=True
+    )
+    return new_dataset, "", "", train_loader, test_loader, val_loader
+    
 def import_dataset(name, info_flags):
     """
     Imports a given MedMNIST dataset and prints the population

@@ -325,7 +325,7 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     # Creates a dedicated folder for intermediary image saves to show
     # the evolution of sampling from a latent space and reconstruction
     # if indicated at function run
-    if target_folder not in os.listdir() and output_intermediary_info: 
+    if target_folder not in os.listdir(): 
         os.mkdir(target_folder)
     for epoch in range(1, epochs+1):
         # Trains

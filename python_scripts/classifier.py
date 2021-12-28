@@ -88,7 +88,7 @@ class classification():
     """
     def __init__(self, n_channels, n_classes, task, learning_rate, name):
         # Defines the pipeline model
-        self.model = CNN(in_channels=n_channels, num_classes=n_classes)
+        self.model = CNN(in_channels=n_channels, num_classes=n_classes).cuda()
         self.data_flag = name
         # Defines the loss function and optimizer
         if task == "multi-label, binary-class": 
@@ -117,13 +117,13 @@ class classification():
             for inputs, targets in tqdm(train_loader):
                 # Performs the forward + backward + optimize passes
                 self.optimizer.zero_grad()
-                outputs = self.model(inputs)
+                outputs = self.model(inputs.cuda())
                 if self.task == "multi-label, binary-class":
-                    targets = targets.to(torch.float32)
+                    targets = targets.to(torch.float32).cuda()
                 else:
-                    targets = targets.squeeze().long()
+                    targets = targets.squeeze().long().cuda()
                 loss = self.criterion(outputs, targets)
-                loss.backward()
+                loss.backward(retain_graph=True)
                 self.optimizer.step()
                 # Computes the batch results
                 train_correct += sum(targets == torch.argmax(outputs, 1))
@@ -142,25 +142,25 @@ class classification():
         Runs the test phase for the trained model.
         """
         self.model.eval()
-        y_true = torch.tensor([])
-        y_score = torch.tensor([])
+        y_true = torch.tensor([]).cuda()
+        y_score = torch.tensor([]).cuda()
         # Computes for the whole given data loader, the corresponding
         # accuracy with the previously trained model.
         with torch.no_grad():
             for inputs, targets in test_loader:
-                outputs = self.model(inputs)
+                outputs = self.model(inputs.cuda())
                 if self.task == 'multi-label, binary-class':
-                    targets = targets.to(torch.float32)
+                    targets = targets.to(torch.float32).cuda()
                     outputs = outputs.softmax(dim=-1)
                 else:
-                    targets = targets.squeeze().long()
-                    outputs = outputs.softmax(dim=-1)
+                    targets = targets.squeeze().long().cuda()
+                    outputs = outputs.softmax(dim=-1).cuda()
                     targets = targets.float().resize_(len(targets), 1)
                 y_true = torch.cat((y_true, targets), 0)
                 y_score = torch.cat((y_score, outputs), 0)
             y_preds = torch.argmax(y_score, 1)
-            y_true = y_true.numpy()
-            y_score = y_score.detach().numpy()
+            y_true = y_true.detach().cpu().numpy()
+            y_score = y_score.detach().cpu().numpy()
             evaluator = Evaluator(self.data_flag, split)
             metrics = evaluator.evaluate(y_score)
         if display_confusion_matrix:
@@ -190,7 +190,7 @@ class classification():
 ##############################
             
 def run_classifier_pipeline(name, info_flags, imported_data,
-                            learning_rate=0.01, epochs=5):
+                            learning_rate=0.005, epochs=10):
     """
     Runs the training and testing process for the classifier 
     declared above.
