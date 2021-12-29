@@ -30,6 +30,7 @@ import torch.optim as optim
 
 from medmnist import Evaluator
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from torchsummary import summary
 from tqdm import tqdm
 
 ##############################
@@ -232,6 +233,7 @@ def run_classifier_pipeline(name, info_flags, imported_data,
         learning_rate=learning_rate, 
         name=name
     )
+    print(summary(clf.model, input_size=(info["n_channels"], 28, 28)))
     # Runs the training phase
     clf.train(
         train_loader=imported_data[3], 
