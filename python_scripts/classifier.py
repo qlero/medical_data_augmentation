@@ -103,12 +103,17 @@ class classification():
         self.training_done=False
         # Defines a list holder for the epoch accuracies for each
         # epoch of a training process
-        self.accuracy_per_epoch = []
+        self.train_accuracy_per_epoch = []
+        self.val_accuracy_per_epoch = []
+        self.val_AUC_per_epoch = []
+        self.test_accuracy = None
+        self.test_AUC = None
     def train(self, train_loader, val_loader, epochs=3):
         """
         Runs the training phase for the loaded model for a given
         data loader and a given number of epochs
         """
+        train_accuracies = []
         for epoch in range(epochs):
             print(f"===================\nEpoch {epoch}\n")
             train_correct = 0
@@ -130,9 +135,11 @@ class classification():
                 train_total += len(outputs)
             # Computes the epoch accuracies
             acc = train_correct.item()/train_total
-            self.accuracy_per_epoch.append(acc)
+            self.train_accuracy_per_epoch.append(acc)
             print(f"train -- accuracy: {round(acc,2)}")
-            self.test(val_loader, split = "val")
+            val_acc, val_AUC = self.test(val_loader, split = "val")
+            self.val_accuracy_per_epoch.append(val_acc)
+            self.val_AUC_per_epoch.append(val_AUC)
         # Records that the train phase was done
         self.training_done=True
         print("===================")
@@ -163,9 +170,11 @@ class classification():
             y_score = y_score.detach().cpu().numpy()
             evaluator = Evaluator(self.data_flag, split)
             metrics = evaluator.evaluate(y_score)
+        accuracy = metrics[0]
+        AUC = metrics[1]
         if display_confusion_matrix:
-            print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
-                  f"AUC: {round(metrics[1], 2)}")
+            print(f"{split} -- accuracy: {round(accuracy,2)}, ",
+                  f"AUC: {round(AUC, 2)}")
             cm = confusion_matrix(y_true.tolist(), 
                                   y_preds.tolist())
             if label_names is None:
@@ -182,13 +191,30 @@ class classification():
             plt.xticks(rotation=90)
             plt.show()
         else:
-            print(f"{split} -- accuracy: {round(metrics[0],2)}, ",
-                  f"AUC: {round(metrics[1], 2)}")
+            print(f"{split} -- accuracy: {round(accuracy,2)}, ",
+                  f"AUC: {round(AUC, 2)}")
+        return accuracy, AUC
 
 ##############################
 ######### FUNCTIONS ##########
 ##############################
-            
+
+def print_accuracy_convergence(training_accs, validation_accs, validation_AUC, test_acc, test_AUC):
+    """
+    Prints the convergence plot of the training and validation losses.
+    """
+    plt.figure(figsize=(10, 5))
+    plt.plot(training_accs)
+    plt.plot(validation_accs)
+    plt.plot(validation_AUC)
+    plt.plot(len(training_accs)-1,test_acc,'ro')
+    plt.plot(len(training_accs)-1,test_AUC,'^')
+    plt.title("Training & Validation Accuracy per Epoch")
+    plt.legend(["Training Acc.", "Validation Acc.", "Validation AUC", 
+                "Test Acc. (at last epoch/early stop)",
+                "Test AUC (at last epoch/early stop)"])
+    plt.show()
+
 def run_classifier_pipeline(name, info_flags, imported_data,
                             learning_rate=0.005, epochs=10):
     """
@@ -213,9 +239,11 @@ def run_classifier_pipeline(name, info_flags, imported_data,
         epochs=epochs
     )
     # Runs the testing phase
-    clf.test(
+    clf.test_accuracy, clf.test_AUC = clf.test(
         test_loader=imported_data[4], 
         label_names=info["label"].values(), 
         display_confusion_matrix=True
     )
+    print_accuracy_convergence(clf.train_accuracy_per_epoch, clf.val_accuracy_per_epoch,
+                               clf.val_AUC_per_epoch, clf.test_accuracy, clf.test_AUC)  
     return clf
