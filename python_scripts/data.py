@@ -32,7 +32,7 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-from .conditional_vae import ConditionalVAE, one_hot
+from .variational_autoencoders import ConditionalVAE, one_hot
 from collections import Counter
 from IPython.display import Image 
 from medmnist import INFO, Evaluator
@@ -169,7 +169,7 @@ def display_set_statistics(datasets, dataset_info, name):
     plt.xticks(rotation=90)
     plt.show()
 
-def generate_augmented_dataset(n_channels, n_classes, latent_dims, 
+def generate_augmented_dataset_condVAE(n_channels, n_classes, latent_dims, 
                                model_path, 
                                original_train_set, batch_size,
                                test_loader, val_loader, n_sampling=None,
