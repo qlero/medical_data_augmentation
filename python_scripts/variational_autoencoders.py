@@ -340,7 +340,7 @@ class JointVAE(nn.Module):
     def forward(self, x):
         """
         Performs a forward pass through the Joint VAE.
-        """
+        """ 
         mu, var, q = self.encode(x)
         z = self.reparameterize(mu, var, q)
         return  self.decode(z), x, q, mu, var
@@ -587,8 +587,10 @@ def run_encoder_pipeline(train_loader, val_loader, test_loader,
     # Creates a dedicated folder for intermediary image saves to show
     # the evolution of sampling from a latent space and reconstruction
     # if indicated at function run
+    if not os.path.exists(f"trained_models/{model_type}/"):
+        os.makedirs(f"trained_models/{model_type}/")
     if name_dataset not in os.listdir(f"trained_models/{model_type}/"): 
-        os.mkdir(f"trained_models/{model_type}/{name_dataset}")
+        os.makedirs(f"trained_models/{model_type}/{name_dataset}")
     for epoch in range(1, epochs+1):
         # Trains
         model, optimizer, train_loss = model_train(

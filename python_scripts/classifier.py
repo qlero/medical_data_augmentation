@@ -24,6 +24,7 @@ Citations:
 import json
 import matplotlib.pyplot as plt
 import medmnist
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -247,5 +248,12 @@ def run_classifier_pipeline(name, info_flags, imported_data,
         display_confusion_matrix=True
     )
     print_accuracy_convergence(clf.train_accuracy_per_epoch, clf.val_accuracy_per_epoch,
-                               clf.val_AUC_per_epoch, clf.test_accuracy, clf.test_AUC)  
+                               clf.val_AUC_per_epoch, clf.test_accuracy, clf.test_AUC) 
+    if not os.path.exists("trained_models/classifier_wo_data_augmentation/"):
+        os.makedirs("trained_models/classifier_wo_data_augmentation/")
+    if name not in os.listdir("trained_models/classifier_wo_data_augmentation/"): 
+        os.makedirs(f"trained_models/classifier_wo_data_augmentation/{name}")
+    # Saves the model
+    torch.save(clf.model.state_dict(),
+               f"trained_models/classifier_wo_data_augmentation/{name}/{name}_epochs{epochs}.pth")
     return clf

@@ -32,10 +32,11 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-from .variational_autoencoders import ConditionalVAE, one_hot
+from .variational_autoencoders import ConditionalVAE, JointVAE, one_hot
 from collections import Counter
 from IPython.display import Image 
 from medmnist import INFO, Evaluator
+from torchvision.transforms import Lambda
 
 ##############################
 ########## CLASSES ###########
@@ -213,11 +214,21 @@ def generate_augmented_dataset_condVAE(n_channels, n_classes, latent_dims,
                             torch.Tensor(old_labels).int(), 
                             transform=data_transform)
     new_dataset = data.ConcatDataset([new_dataset, old_dataset])
+    # Creates the Weighted Random Sampler
+    targets = []
+    for _, t in new_dataset:
+        targets.append(t)
+    targets = torch.tensor(targets)
+    class_sample_count = torch.tensor([(targets == t).sum() 
+                                       for t in torch.unique(targets, sorted=True)])
+    weight = 1. / class_sample_count.float()
+    samples_weight = torch.tensor([weight[t] for t in targets])
+    sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
     train_loader = data.DataLoader(
         dataset=new_dataset,
         batch_size=batch_size,
-        shuffle=True
+        sampler=sampler#shuffle=True
     )
     return new_dataset, "", "", train_loader, test_loader, val_loader
 
@@ -228,42 +239,44 @@ def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dim
     """
     Generates an augmented training set for a classifier task.
     """
-    data_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[.5], std=[.5])
-    ])
     # Loads conditional VAE model
     with torch.no_grad():
         model = JointVAE(n_channels, latent_dims, categorical_dims).cuda()
         model.load_state_dict(torch.load(model_path))
-        # Generates new images with their labels
-        classes_counter = Counter([x[0] for x in original_train_set.labels])
-        max_nb_elements = max(classes_counter.values())
-        weighted_counter = {k:(abs(v-max_nb_elements)+100) 
-                            for k,v in classes_counter.items()}
-        weighted_counter = {k:v/sum(weighted_counter.values()) 
-                            for k,v in weighted_counter.items()}
-            
-        images = model.sample(
-            n_sampling,
-            one_hot(torch.tensor(labels).int(),n_classes).cuda()
-        ).detach().cpu()
-    del model
-    gc.collect()
-    torch.cuda.empty_cache()
+    data_transform_new = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[.5], std=[.5]),
+        Lambda(lambda img: model.generate(torch.stack([img, img]).cuda())[0].detach().cpu())
+    ])
+    data_transform_old = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[.5], std=[.5]),
+    ])
     # Generates the augmented dataset
     #for entry in original_train_set:
     old_labels = np.array([x[0] for x in original_train_set.labels])
-    new_dataset = data.TensorDataset(images, torch.Tensor(labels).int())
+    new_dataset = MyDataset(original_train_set.imgs, 
+                            torch.Tensor(old_labels).int(), 
+                            transform=data_transform_new)
     old_dataset = MyDataset(original_train_set.imgs, 
                             torch.Tensor(old_labels).int(), 
-                            transform=data_transform)
+                            transform=data_transform_old)
     new_dataset = data.ConcatDataset([new_dataset, old_dataset])
+    # Creates the Weighted Random Sampler
+    targets = []
+    for _, t in new_dataset:
+        targets.append(t)
+    targets = torch.tensor(targets)
+    class_sample_count = torch.tensor([(targets == t).sum() 
+                                       for t in torch.unique(targets, sorted=True)])
+    weight = 1. / class_sample_count.float()
+    samples_weight = torch.tensor([weight[t] for t in targets])
+    sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
     train_loader = data.DataLoader(
         dataset=new_dataset,
         batch_size=batch_size,
-        shuffle=True
+        sampler=sampler#shuffle=True
     )
     return new_dataset, "", "", train_loader, test_loader, val_loader
     
