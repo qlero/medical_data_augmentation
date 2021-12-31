@@ -220,6 +220,52 @@ def generate_augmented_dataset_condVAE(n_channels, n_classes, latent_dims,
         shuffle=True
     )
     return new_dataset, "", "", train_loader, test_loader, val_loader
+
+def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dims,
+                               model_path, 
+                               original_train_set, batch_size,
+                               test_loader, val_loader, n_sampling=None):
+    """
+    Generates an augmented training set for a classifier task.
+    """
+    data_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[.5], std=[.5])
+    ])
+    # Loads conditional VAE model
+    with torch.no_grad():
+        model = JointVAE(n_channels, latent_dims, categorical_dims).cuda()
+        model.load_state_dict(torch.load(model_path))
+        # Generates new images with their labels
+        classes_counter = Counter([x[0] for x in original_train_set.labels])
+        max_nb_elements = max(classes_counter.values())
+        weighted_counter = {k:(abs(v-max_nb_elements)+100) 
+                            for k,v in classes_counter.items()}
+        weighted_counter = {k:v/sum(weighted_counter.values()) 
+                            for k,v in weighted_counter.items()}
+            
+        images = model.sample(
+            n_sampling,
+            one_hot(torch.tensor(labels).int(),n_classes).cuda()
+        ).detach().cpu()
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+    # Generates the augmented dataset
+    #for entry in original_train_set:
+    old_labels = np.array([x[0] for x in original_train_set.labels])
+    new_dataset = data.TensorDataset(images, torch.Tensor(labels).int())
+    old_dataset = MyDataset(original_train_set.imgs, 
+                            torch.Tensor(old_labels).int(), 
+                            transform=data_transform)
+    new_dataset = data.ConcatDataset([new_dataset, old_dataset])
+    # Encapsulates data into dataloader form
+    train_loader = data.DataLoader(
+        dataset=new_dataset,
+        batch_size=batch_size,
+        shuffle=True
+    )
+    return new_dataset, "", "", train_loader, test_loader, val_loader
     
 def import_dataset(name, info_flags):
     """
