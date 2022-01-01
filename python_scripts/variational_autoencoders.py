@@ -1,8 +1,9 @@
 """
 
-This .py file contains the classes <ConditionalVAE> and <TestCVAE>, and the
-functions <one_hot>, <model_evaluate>, <model_train>, and <run_classifier_pipeline> 
-inspired in part from the following repositories:
+This .py file contains the classes <ConditionalVAE>, <JointVAE>, <TestCVAE>, and 
+<TestJointVAE>, and the functions <one_hot>, <model_evaluate>, <model_train>, 
+<print_loss_convergence> and <run_classifier_pipeline> inspired in part from the 
+following repositories:
     > https://github.com/AntixK/PyTorch-VAE
     > https://github.com/unnir/cVAE
 
@@ -467,44 +468,7 @@ class TestJointVAE():
 ##############################
 ######### FUNCTIONS ##########
 ##############################
-    
-def one_hot(labels, class_size):
-    """
-    Implements a one-hot encoding function for categorical labels.
-    """
-    targets = torch.zeros(labels.size(0), class_size)
-    for i, label in enumerate(labels):
-        targets[i, label] = 1
-    return targets.to(device)
  
-def model_train(model, optimizer, train_loader, epoch, n_classes, 
-                print_batch_loss, model_type):
-    """
-    Performs a single forward and backward pass of a given model.
-    """
-    length_dataset = len(train_loader.dataset)
-    model.train()
-    train_loss = 0
-    for batch_idx, (data, labels) in enumerate(train_loader):
-        data = data.to(device)
-        if model_type == "CondVAE":
-            labels = one_hot(labels.to(device), n_classes)
-            recon_batch, _, mu, var = model(data, labels)
-            optimizer.zero_grad()
-            loss = model.loss_function(recon_batch, data, mu, var)["loss"]
-        else:
-            recon_batch, _, q, mu, var = model(data)
-            optimizer.zero_grad()
-            loss = model.loss_function(recon_batch, data, q, mu, var, batch_idx)["loss"]
-        loss.backward()
-        train_loss += loss.detach().cpu().numpy()
-        optimizer.step()
-        if batch_idx % 10 == 0 and print_batch_loss:
-            print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
-                  f"\tLoss: {round(loss.item()/len(data),6)}")
-    print(f"Train epoch {epoch} -- average loss: {train_loss/length_dataset}")
-    return model, optimizer, train_loss/length_dataset
-    
 def model_evaluate(model, loader, epoch, n_classes, n_channels, name_dataset,
                    eval_step, print_reconstruction, model_type):
     """
@@ -534,6 +498,43 @@ def model_evaluate(model, loader, epoch, n_classes, n_channels, name_dataset,
     eval_loss /= len(loader.dataset)
     print(f"{eval_step} set loss: {round(eval_loss,6)}")
     return model, eval_loss
+
+def model_train(model, optimizer, train_loader, epoch, n_classes, 
+                print_batch_loss, model_type):
+    """
+    Performs a single forward and backward pass of a given model.
+    """
+    length_dataset = len(train_loader.dataset)
+    model.train()
+    train_loss = 0
+    for batch_idx, (data, labels) in enumerate(train_loader):
+        data = data.to(device)
+        if model_type == "CondVAE":
+            labels = one_hot(labels.to(device), n_classes)
+            recon_batch, _, mu, var = model(data, labels)
+            optimizer.zero_grad()
+            loss = model.loss_function(recon_batch, data, mu, var)["loss"]
+        else:
+            recon_batch, _, q, mu, var = model(data)
+            optimizer.zero_grad()
+            loss = model.loss_function(recon_batch, data, q, mu, var, batch_idx)["loss"]
+        loss.backward()
+        train_loss += loss.detach().cpu().numpy()
+        optimizer.step()
+        if batch_idx % 10 == 0 and print_batch_loss:
+            print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
+                  f"\tLoss: {round(loss.item()/len(data),6)}")
+    print(f"Train epoch {epoch} -- average loss: {train_loss/length_dataset}")
+    return model, optimizer, train_loss/length_dataset
+    
+def one_hot(labels, class_size):
+    """
+    Implements a one-hot encoding function for categorical labels.
+    """
+    targets = torch.zeros(labels.size(0), class_size)
+    for i, label in enumerate(labels):
+        targets[i, label] = 1
+    return targets.to(device)
 
 def print_loss_convergence(training_losses, validation_losses, test_loss):
     """

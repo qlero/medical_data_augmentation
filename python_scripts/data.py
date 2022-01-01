@@ -223,7 +223,7 @@ def generate_augmented_dataset_condVAE(n_channels, n_classes, latent_dims,
                                        for t in torch.unique(targets, sorted=True)])
     weight = 1. / class_sample_count.float()
     samples_weight = torch.tensor([weight[t] for t in targets])
-    sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+    sampler = data.WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
     train_loader = data.DataLoader(
         dataset=new_dataset,
@@ -271,7 +271,7 @@ def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dim
                                        for t in torch.unique(targets, sorted=True)])
     weight = 1. / class_sample_count.float()
     samples_weight = torch.tensor([weight[t] for t in targets])
-    sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+    sampler = data.WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
     train_loader = data.DataLoader(
         dataset=new_dataset,
@@ -280,12 +280,12 @@ def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dim
     )
     return new_dataset, "", "", train_loader, test_loader, val_loader
     
-def import_dataset(name, info_flags):
+def import_dataset(name, info_flags, batch_size=128):
     """
     Imports a given MedMNIST dataset and prints the population
     distribution for both train and test sets.
     """
-    dataset = create_data_loaders(info_flags[name][4])
+    dataset = create_data_loaders(info_flags[name][4], batch_size=batch_size)
     display_set_statistics(dataset, info_flags[name], name)
     return dataset
     
