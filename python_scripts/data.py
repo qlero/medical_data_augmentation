@@ -90,7 +90,7 @@ def check_cuda_availability():
     )
 
 def create_data_loaders(DataClass, validation_split=0.1,
-                        batch_size=128, upscale=False, download=True):
+                        batch_size=128, upscale=False, download=True, sampler=True):
     """
     Creates the train, train_at_eval (validation), and test 
     data loaders of a given dataclass from the MedMNIST and returns
@@ -140,9 +140,14 @@ def create_data_loaders(DataClass, validation_split=0.1,
         len(samples_weight)
     )
     # Encapsulates data into dataloader form
-    train_loader = data.DataLoader(dataset=train_dataset, 
-                                   batch_size=batch_size, 
-                                   sampler=sampler)
+    if sampler:
+        train_loader = data.DataLoader(dataset=train_dataset, 
+                                       batch_size=batch_size, 
+                                       sampler=sampler)
+    else:
+        train_loader = data.DataLoader(dataset=train_dataset, 
+                                       batch_size=batch_size, 
+                                       shuffle=False)
     val_loader = data.DataLoader(dataset=val_dataset,
                                          batch_size=2*batch_size, 
                                          shuffle=False)
@@ -373,12 +378,14 @@ def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dim
     )
     return new_dataset, "", "", train_loader, test_loader, val_loader
     
-def import_dataset(name, info_flags, batch_size=128, upscale=False):
+def import_dataset(name, info_flags, batch_size=128, upscale=False, sampler=True):
     """
     Imports a given MedMNIST dataset and prints the population
     distribution for both train and test sets.
     """
-    dataset = create_data_loaders(info_flags[name][4], batch_size=batch_size, upscale=upscale)
+    dataset = create_data_loaders(info_flags[name][4], batch_size=batch_size, 
+                                  upscale=upscale, 
+                                  sampler=sampler)
     display_set_statistics(dataset, info_flags[name], name)
     return dataset
     
