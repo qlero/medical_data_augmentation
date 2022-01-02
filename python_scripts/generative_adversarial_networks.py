@@ -28,7 +28,7 @@ class ConvBlock(nn.Module):
                 3, 1, 0
             ),
             nn.BatchNorm2d(out_features) if bn else nn.Identity(),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.2),
         )
     def forward(self, x):
         return self.layers(x)
@@ -45,7 +45,7 @@ class TransConvBlock(nn.Module):
                 padding=padding
             ),
             nn.BatchNorm2d(out_features),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
         )
     def forward(self, x):
         return self.layers(x)
@@ -62,37 +62,71 @@ class Discriminator(nn.Module):
             ),
             ConvBlock(
                 ndf, 
-                ndf *2
+                ndf * 2
             ),
             ConvBlock(
-                ndf * 2,
+                ndf * 2, 
                 ndf * 4
             ),
-            ConvBlock(
+            nn.Conv2d(
                 ndf * 4, 
-                ndf * 8
-            ),
-            nn.Conv2d(
-                ndf * 8, 
                 1, 
-                5, 
                 3, 
+                2, 
                 0, 
-                bias=False
             ),
+            nn.MaxPool2d(3,2,1),
             nn.Conv2d(
-                1, 
-                1, 
-                3, 
-                3, 
-                0, 
-                bias=False
+                1,1,5
             ),
-            nn.MaxPool2d(3, 2, 1),
             nn.Sigmoid()
         )
     def forward(self, x):
         return self.layers(x)
+    
+# class Discriminator(nn.Module):
+#     def __init__(self, n_channels, ndf = 28, img_size = 28):
+#         super().__init__()
+#         self.img_size = img_size
+#         self.layers = nn.Sequential(
+#             ConvBlock(
+#                 n_channels, 
+#                 ndf, 
+#                 bn=False
+#             ),
+#             ConvBlock(
+#                 ndf, 
+#                 ndf *2
+#             ),
+#             ConvBlock(
+#                 ndf * 2,
+#                 ndf * 4
+#             ),
+#             ConvBlock(
+#                 ndf * 4, 
+#                 ndf * 8
+#             ),
+#             nn.Conv2d(
+#                 ndf * 8, 
+#                 1, 
+#                 5, 
+#                 3, 
+#                 0, 
+#                 bias=False
+#             ),
+#             nn.Conv2d(
+#                 1, 
+#                 1, 
+#                 3, 
+#                 3, 
+#                 0, 
+#                 bias=False
+#             ),
+#             nn.MaxPool2d(3, 2, 1),
+#             nn.Sigmoid()
+#         )
+#     def forward(self, x):
+#         return self.layers(x)
 
 class Generator(nn.Module):
     def __init__(self, z_dim, n_channels, ngf = 28, img_size = 28):
@@ -103,43 +137,78 @@ class Generator(nn.Module):
                 z_dim, 
                 ngf * 8, 
                 stride=2, 
-                padding=0
-            ),  # 4 x 4
+                padding=1
+            ),
             TransConvBlock(
                 ngf * 8, 
-                ngf * 4
-            ),  # 8 x 8
+                ngf * 4,
+                stride=2,
+                padding=1
+            ),
             TransConvBlock(
                 ngf * 4, 
                 ngf * 4,
-                stride=2
-            ),  # 8 x 8
-            TransConvBlock(
-                ngf * 4, 
-                ngf * 2
-            ),  # 16 x 16
-            TransConvBlock(
-                ngf * 2, 
-                ngf * 2
+                stride=2,
+                padding=0
             ),
-            TransConvBlock(
-                ngf * 2, 
-                ngf * 2
-            ),
-            TransConvBlock(
-                ngf * 2, 
-                ngf * 1
-            ),  # 32 x 32
             nn.ConvTranspose2d(
-                ngf, n_channels, 
-                4, 
-                2, 
+                ngf*4, 
+                n_channels, 
+                3, 
+                3, 
                 1,
-            ),  # 64 x 64
+            ),
             nn.Sigmoid()
         )
     def forward(self, x):
         return self.layers(x)
+
+# class Generator(nn.Module):
+#     def __init__(self, z_dim, n_channels, ngf = 28, img_size = 28):
+#         super(Generator, self).__init__()
+#         self.img_size = img_size
+#         self.layers = nn.Sequential(
+#             TransConvBlock(
+#                 z_dim, 
+#                 ngf * 8, 
+#                 stride=2, 
+#                 padding=0
+#             ),  # 4 x 4
+#             TransConvBlock(
+#                 ngf * 8, 
+#                 ngf * 4
+#             ),  # 8 x 8
+#             TransConvBlock(
+#                 ngf * 4, 
+#                 ngf * 4,
+#                 stride=2
+#             ),  # 8 x 8
+#             TransConvBlock(
+#                 ngf * 4, 
+#                 ngf * 2
+#             ),  # 16 x 16
+#             TransConvBlock(
+#                 ngf * 2, 
+#                 ngf * 2
+#             ),
+#             TransConvBlock(
+#                 ngf * 2, 
+#                 ngf * 2
+#             ),
+#             TransConvBlock(
+#                 ngf * 2, 
+#                 ngf * 1
+#             ),  # 32 x 32
+#             nn.ConvTranspose2d(
+#                 ngf, n_channels, 
+#                 4, 
+#                 2, 
+#                 1,
+#             ),  # 64 x 64
+#             nn.Sigmoid()
+#         )
+#     def forward(self, x):
+#         return self.layers(x)
 
 class ConditionalDiscriminator(Discriminator):
     def __init__(self, n_channels, n_classes, ndf = 28, img_size = 28):
@@ -237,9 +306,9 @@ def model_train(device, generator, discriminator,
             optimizer_generator.step()
             train_generator_loss += gen_loss
             train_discriminator_loss += disc_loss
-        if batch_idx % 10 == 0 and print_batch_loss:
-            print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
-                  f"\tLoss: {round(loss.item()/len(data),6)}")
+            if batch_idx % 10 == 0 and print_batch_loss:
+                print(f"Train epoch {epoch}: [{batch_idx*len(data)}/{length_dataset}]",
+                      f"\tLoss: {round(loss.item()/len(data),6)}")
     avg_gen_loss = train_generator_loss/length_dataset
     avg_dis_loss = train_discriminator_loss/length_dataset
     print(f"Train epoch {epoch}:",
