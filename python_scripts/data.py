@@ -1,12 +1,12 @@
 """
 
-This .py file contains the functions <create_data_loaders>, 
-<display_set_statistics>, <import_dataset>, <retrieve_flag_info> 
+This .py file contains the class <MyDataset>, and the functions 
+<check_cuda_availability>, <create_data_loaders>, <display_set_statistics>, 
+<generate_augmented_dataset_condVAE>, <generate_augmented_dataset_condGAN>,
+<generate_augmented_dataset_jointVAE>, <import_dataset>, <retrieve_flag_info> 
 adapted from the notebook getting_started found in the /examples/ 
 subfolder in:
     > https://github.com/MedMNIST/MedMNIST/
-    
-Objects are declared in alphabetical order.
 
 Citations:
     > Jiancheng Yang, Rui Shi, Donglai Wei, Zequan Liu, Lin Zhao, Bilian Ke, 

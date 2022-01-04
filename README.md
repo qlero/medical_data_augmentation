@@ -26,3 +26,7 @@ We will look into applying the above project on some (if not all) of the followi
 ## Notes
 
 We will also provide a short report explaining the choice of VAE, AE, and/or GAN models, outlining differences between datasets' results. We will also try to interprete and justify possible differences with regards to models, data specifications, visual features, and bibliography references used to support the choices made.
+
+## Google Colab
+
+The code is available as a self-hosted, unique Google Colab Notebook accessible [here](https://drive.google.com/file/d/1RaOwW-o3fSPN5VnCMrga0zsOfYLUPql_/view?usp=sharing).

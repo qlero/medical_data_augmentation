@@ -1,8 +1,9 @@
 """
 
 This .py file contains the classes <CNN> and <classification>, and the
-function <run_classifier_pipeline> inspired in part from the notebook 
-getting_started.ipynb found in the /examples/ subfolder in:
+functions <print_accuracy_convergence>, <run_classifier_pipeline> 
+inspired in part from the notebook getting_started.ipynb found 
+in the /examples/ subfolder in:
     > https://github.com/MedMNIST/MedMNIST/
 
 Citations:

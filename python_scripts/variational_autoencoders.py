@@ -2,7 +2,7 @@
 
 This .py file contains the classes <ConditionalVAE>, <JointVAE>, <TestCVAE>, and 
 <TestJointVAE>, and the functions <one_hot>, <model_evaluate>, <model_train>, 
-<print_loss_convergence> and <run_classifier_pipeline> inspired in part from the 
+<print_loss_convergence> and <run_encoder_pipeline> inspired in part from the 
 following repositories:
     > https://github.com/AntixK/PyTorch-VAE
     > https://github.com/unnir/cVAE
