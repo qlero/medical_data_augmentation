@@ -89,8 +89,11 @@ def check_cuda_availability():
         sep=""
     )
 
-def create_data_loaders(DataClass, validation_split=0.1,
-                        batch_size=128, upscale=False, download=True, sampler=True):
+def create_data_loaders(DataClass,
+                        batch_size, geometric_augment,
+                        upscale, sampler, print_visualization,
+                        validation_split=0.1, download=True):
+    
     """
     Creates the train, train_at_eval (validation), and test 
     data loaders of a given dataclass from the MedMNIST and returns
@@ -100,35 +103,62 @@ def create_data_loaders(DataClass, validation_split=0.1,
         >   using-weighted-random-sampler-in-pytorch/
     """
     # Declares the dataloader pre-processing
-    data_transform = transforms.Compose([
+    data_transform_valtest = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=[.5], std=[.5])
         ])
-    if not upscale:
-        data_transform_upscale = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[.5], std=[.5])
-        ])
-    else:
-        data_transform_upscale = transforms.Compose([
+    if upscale:
+        data_transform_train = transforms.Compose([
             transforms.ToTensor(),
             transforms.Scale((32,32)),
             transforms.Normalize(mean=[.5], std=[.5])
         ])
+    # geometric data augmentation, black and white images
+    elif geometric_augment==1:
+        data_transform_train = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.RandomInvert(),
+            transforms.RandomAdjustSharpness(sharpness_factor=2),
+            transforms.RandomRotation(degrees=(0, 180)),
+            transforms.Normalize(mean=[.5], std=[.5])
+        ])
+    # geometric data augmentation, black and white/left/right view images
+    elif geometric_augment==2:
+        data_transform_train = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.RandomInvert(),
+            transforms.RandomAdjustSharpness(sharpness_factor=2),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.Normalize(mean=[.5], std=[.5]),
+        ])
+    # geometric data augmentation, color images
+    elif geometric_augment==3:
+        data_transform_train = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.ColorJitter(brightness=.5, hue=.3),
+            transforms.RandomRotation(degrees=(0, 180)),
+            transforms.Normalize(mean=[.5], std=[.5])
+        ])
+    else:
+        data_transform_train = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[.5], std=[.5])
+        ])
     # Loads the data
     train_dataset = DataClass(split="train", 
-                              transform=data_transform_upscale, 
+                              transform=data_transform_train, 
                               download=download)
     val_dataset = DataClass(split="val", 
-                              transform=data_transform, 
+                              transform=data_transform_valtest, 
                               download=download)
     test_dataset = DataClass(split="test", 
-                             transform=data_transform, 
+                             transform=data_transform_valtest, 
                              download=download)
     # Visualizes the imported data
-    print("===================")
-    print("Montage of randomly extracted images from the dataset:")
-    display(train_dataset.montage(length=10))
+    if print_visualization:
+        print("===================")
+        print("Montage of randomly extracted images from the dataset:")
+        display(train_dataset.montage(length=10))
     # Constructs the Weighted Random Sampler for the training dataset
     y_train = [x[0] for x in train_dataset.labels]
     weight = Counter(y_train)
@@ -147,12 +177,12 @@ def create_data_loaders(DataClass, validation_split=0.1,
     else:
         train_loader = data.DataLoader(dataset=train_dataset, 
                                        batch_size=batch_size, 
-                                       shuffle=False)
+                                       shuffle=True)
     val_loader = data.DataLoader(dataset=val_dataset,
-                                         batch_size=2*batch_size, 
+                                         batch_size=batch_size, 
                                          shuffle=False)
     test_loader = data.DataLoader(dataset=test_dataset, 
-                                  batch_size=2*batch_size, 
+                                  batch_size=batch_size, 
                                   shuffle=False)
     # Prints the resulting loader metadata
     print("===================")
@@ -211,18 +241,18 @@ def generate_augmented_dataset_condVAE(n_channels, n_classes, latent_dims,
         model = ConditionalVAE(n_channels, n_classes, latent_dims).cuda()
         model.load_state_dict(torch.load(model_path))
         # Generates new images with their labels
-        if weighted_sampling:
-            classes_counter = Counter([x[0] for x in original_train_set.labels])
-            max_nb_elements = max(classes_counter.values())
-            weighted_counter = {k:(abs(v-max_nb_elements)+100) 
-                                for k,v in classes_counter.items()}
-            weighted_counter = {k:v/sum(weighted_counter.values()) 
-                                for k,v in weighted_counter.items()}
-            labels = np.random.choice(list(range(n_classes)),
-                                 n_sampling,
-                                 p=list(weighted_counter.values()))
-        else:
-            labels = np.random.randint(0, n_classes, n_sampling)
+        #if weighted_sampling:
+        classes_counter = Counter([x[0] for x in original_train_set.labels])
+        max_nb_elements = max(classes_counter.values())
+        weighted_counter = {k:(abs(v-max_nb_elements)+100) 
+                            for k,v in classes_counter.items()}
+        weighted_counter = {k:v/sum(weighted_counter.values()) 
+                            for k,v in weighted_counter.items()}
+        labels = np.random.choice(list(range(n_classes)),
+                             n_sampling,
+                             p=list(weighted_counter.values()))
+        #else:
+        #    labels = np.random.randint(0, n_classes, n_sampling)
         images = model.sample(
             n_sampling,
             one_hot(torch.tensor(labels).int(),n_classes).cuda()
@@ -249,11 +279,18 @@ def generate_augmented_dataset_condVAE(n_channels, n_classes, latent_dims,
     samples_weight = torch.tensor([weight[t] for t in targets])
     sampler = data.WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
-    train_loader = data.DataLoader(
-        dataset=new_dataset,
-        batch_size=batch_size,
-        sampler=sampler#shuffle=True
-    )
+    if weighted_sampling:
+        train_loader = data.DataLoader(
+            dataset=new_dataset,
+            batch_size=batch_size,
+            sampler=sampler
+        )
+    else:
+        train_loader = data.DataLoader(
+            dataset=new_dataset,
+            batch_size=batch_size,
+            shuffle=True
+        )
     return new_dataset, "", "", train_loader, test_loader, val_loader
 
 def generate_augmented_dataset_condGAN(n_channels, n_classes, latent_dims, 
@@ -282,18 +319,18 @@ def generate_augmented_dataset_condGAN(n_channels, n_classes, latent_dims,
     learner = RAvgHingeGanLearner(G,None)
     learner.load_generator(model_path)
     # Generates new images with their labels
-    if weighted_sampling:
-        classes_counter = Counter([x[0] for x in original_train_set.labels])
-        max_nb_elements = max(classes_counter.values())
-        weighted_counter = {k:(abs(v-max_nb_elements)+100) 
-                            for k,v in classes_counter.items()}
-        weighted_counter = {k:v/sum(weighted_counter.values()) 
-                            for k,v in weighted_counter.items()}
-        labels = np.random.choice(list(range(n_classes)),
-                             n_sampling,
-                             p=list(weighted_counter.values()))
-    else:
-        labels = np.random.randint(0, n_classes, n_sampling)
+    #if weighted_sampling:
+    classes_counter = Counter([x[0] for x in original_train_set.labels])
+    max_nb_elements = max(classes_counter.values())
+    weighted_counter = {k:(abs(v-max_nb_elements)+100) 
+                        for k,v in classes_counter.items()}
+    weighted_counter = {k:v/sum(weighted_counter.values()) 
+                        for k,v in weighted_counter.items()}
+    labels = np.random.choice(list(range(n_classes)),
+                         n_sampling,
+                         p=list(weighted_counter.values()))
+    #else:
+    #    labels = np.random.randint(0, n_classes, n_sampling)
     labels = torch.Tensor(labels).int()
     dist = Normal(0,1)
     latent_vectors = dist.sample((len(labels),latent_dims))
@@ -323,17 +360,25 @@ def generate_augmented_dataset_condGAN(n_channels, n_classes, latent_dims,
     samples_weight = torch.tensor([weight[t] for t in targets])
     sampler = data.WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
-    train_loader = data.DataLoader(
-        dataset=new_dataset,
-        batch_size=batch_size,
-        sampler=sampler#shuffle=True
-    )
+    if weighted_sampling:
+        train_loader = data.DataLoader(
+            dataset=new_dataset,
+            batch_size=batch_size,
+            sampler=sampler
+        )
+    else:
+        train_loader = data.DataLoader(
+            dataset=new_dataset,
+            batch_size=batch_size,
+            shuffle=True
+        )
     return new_dataset, "", "", train_loader, test_loader, val_loader
 
 def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dims,
                                model_path, 
                                original_train_set, batch_size,
-                               test_loader, val_loader, n_sampling=None):
+                               test_loader, val_loader, n_sampling=None,
+                               weighted_sampling=False):
     """
     Generates an augmented training set for a classifier task.
     """
@@ -371,22 +416,34 @@ def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dim
     samples_weight = torch.tensor([weight[t] for t in targets])
     sampler = data.WeightedRandomSampler(samples_weight, len(samples_weight))
     # Encapsulates data into dataloader form
-    train_loader = data.DataLoader(
-        dataset=new_dataset,
-        batch_size=batch_size,
-        sampler=sampler#shuffle=True
-    )
+    if weighted_sampling:
+        train_loader = data.DataLoader(
+            dataset=new_dataset,
+            batch_size=batch_size,
+            sampler=sampler
+        )
+    else:
+        train_loader = data.DataLoader(
+            dataset=new_dataset,
+            batch_size=batch_size,
+            shuffle=True
+        )
     return new_dataset, "", "", train_loader, test_loader, val_loader
     
-def import_dataset(name, info_flags, batch_size=128, upscale=False, sampler=True):
+def import_dataset(name, info_flags, batch_size=128, geometric_augment=False,
+                   upscale=False, sampler=False, print_visualization=False):
     """
     Imports a given MedMNIST dataset and prints the population
     distribution for both train and test sets.
     """
-    dataset = create_data_loaders(info_flags[name][4], batch_size=batch_size, 
+    dataset = create_data_loaders(info_flags[name][4], 
+                                  batch_size=batch_size, 
+                                  geometric_augment=geometric_augment,
                                   upscale=upscale, 
-                                  sampler=sampler)
-    display_set_statistics(dataset, info_flags[name], name)
+                                  sampler=sampler,
+                                  print_visualization=print_visualization)
+    if print_visualization:
+        display_set_statistics(dataset, info_flags[name], name)
     return dataset
     
 def retrieve_flag_info(flag): 

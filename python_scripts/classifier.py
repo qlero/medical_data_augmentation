@@ -219,7 +219,8 @@ def print_accuracy_convergence(training_accs, validation_accs, validation_AUC, t
     plt.show()
 
 def run_classifier_pipeline(name, info_flags, imported_data,
-                            learning_rate=0.005, epochs=10):
+                            learning_rate=0.001, epochs=20,
+                            DA_technique=""):
     """
     Runs the training and testing process for the classifier 
     declared above.
@@ -256,5 +257,5 @@ def run_classifier_pipeline(name, info_flags, imported_data,
         os.makedirs(f"trained_models/classifier_wo_data_augmentation/{name}")
     # Saves the model
     torch.save(clf.model.state_dict(),
-               f"trained_models/classifier_wo_data_augmentation/{name}/{name}_epochs{epochs}.pth")
+               f"trained_models/classifier_wo_data_augmentation/{name}/{name}{DA_technique}_epochs{epochs}.pth")
     return clf
