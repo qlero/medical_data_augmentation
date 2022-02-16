@@ -126,8 +126,8 @@ def create_data_loaders(DataClass,
     elif geometric_augment==2:
         data_transform_train = transforms.Compose([
             transforms.ToTensor(),
-            transforms.RandomInvert(),
             transforms.RandomAdjustSharpness(sharpness_factor=2),
+            transforms.RandomAutocontrast(),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.Normalize(mean=[.5], std=[.5]),
         ])
@@ -135,8 +135,10 @@ def create_data_loaders(DataClass,
     elif geometric_augment==3:
         data_transform_train = transforms.Compose([
             transforms.ToTensor(),
-            transforms.ColorJitter(brightness=.5, hue=.3),
-            transforms.RandomRotation(degrees=(0, 180)),
+            transforms.RandomAdjustSharpness(sharpness_factor=2),
+            transforms.RandomAutocontrast(),
+            transforms.ColorJitter(hue=.05),
+            transforms.RandomHorizontalFlip(p=0.5),
             transforms.Normalize(mean=[.5], std=[.5])
         ])
     else:
@@ -430,7 +432,7 @@ def generate_augmented_dataset_jointVAE(n_channels, latent_dims, categorical_dim
         )
     return new_dataset, "", "", train_loader, test_loader, val_loader
     
-def import_dataset(name, info_flags, batch_size=128, geometric_augment=False,
+def import_dataset(name, info_flags, batch_size=64, geometric_augment=False,
                    upscale=False, sampler=False, print_visualization=False):
     """
     Imports a given MedMNIST dataset and prints the population

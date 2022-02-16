@@ -92,6 +92,7 @@ class classification():
     def __init__(self, n_channels, n_classes, task, learning_rate, name):
         # Defines the pipeline model
         self.model = CNN(in_channels=n_channels, num_classes=n_classes).cuda()
+        self.best_model = None
         self.data_flag = name
         # Defines the loss function and optimizer
         if task == "multi-label, binary-class": 
@@ -100,8 +101,7 @@ class classification():
             self.criterion = nn.CrossEntropyLoss()
         self.task = task
         self.optimizer = optim.SGD(self. model.parameters(), 
-                                   lr=learning_rate, 
-                                   momentum=0.9)
+                                   lr=learning_rate, momentum=0.9)
         # Creates a boolean check to avoid testing before training
         self.training_done=False
         # Defines a list holder for the epoch accuracies for each
@@ -109,6 +109,7 @@ class classification():
         self.train_accuracy_per_epoch = []
         self.val_accuracy_per_epoch = []
         self.val_AUC_per_epoch = []
+        self.best_val_accuracy = float("-inf")
         self.test_accuracy = None
         self.test_AUC = None
     def train(self, train_loader, val_loader, epochs=3):
@@ -139,18 +140,23 @@ class classification():
             # Computes the epoch accuracies
             acc = train_correct.item()/train_total
             self.train_accuracy_per_epoch.append(acc)
-            print(f"train -- accuracy: {round(acc,2)}")
+            print(f"train -- accuracy: {round(acc,4)}")
             val_acc, val_AUC = self.test(val_loader, split = "val")
+            if val_acc > self.best_val_accuracy:
+                self.best_val_accuracy = val_acc
+                self.best_model = self.model.state_dict()
             self.val_accuracy_per_epoch.append(val_acc)
             self.val_AUC_per_epoch.append(val_AUC)
         # Records that the train phase was done
         self.training_done=True
         print("===================")
     def test(self, test_loader, label_names = None, split = "test",
-             display_confusion_matrix=False):
+             display_confusion_matrix=False, use_best_model=False):
         """
         Runs the test phase for the trained model.
         """
+        if use_best_model: 
+            self.model.load_state_dict(self.best_model)
         self.model.eval()
         y_true = torch.tensor([]).cuda()
         y_score = torch.tensor([]).cuda()
@@ -173,11 +179,11 @@ class classification():
             y_score = y_score.detach().cpu().numpy()
             evaluator = Evaluator(self.data_flag, split)
             metrics = evaluator.evaluate(y_score)
-        accuracy = metrics[0]
-        AUC = metrics[1]
+        accuracy = metrics[1]
+        AUC = metrics[0]
         if display_confusion_matrix:
-            print(f"{split} -- accuracy: {round(accuracy,2)}, ",
-                  f"AUC: {round(AUC, 2)}")
+            print(f"{split} -- accuracy: {round(accuracy,4)}, ",
+                  f"AUC: {round(AUC, 4)}")
             cm = confusion_matrix(y_true.tolist(), 
                                   y_preds.tolist())
             if label_names is None:
@@ -194,8 +200,8 @@ class classification():
             plt.xticks(rotation=90)
             plt.show()
         else:
-            print(f"{split} -- accuracy: {round(accuracy,2)}, ",
-                  f"AUC: {round(AUC, 2)}")
+            print(f"{split} -- accuracy: {round(accuracy,4)}, ",
+                  f"AUC: {round(AUC, 4)}")
         return accuracy, AUC
 
 ##############################
@@ -214,8 +220,8 @@ def print_accuracy_convergence(training_accs, validation_accs, validation_AUC, t
     plt.plot(len(training_accs)-1,test_AUC,'^')
     plt.title("Training & Validation Accuracy per Epoch")
     plt.legend(["Training Acc.", "Validation Acc.", "Validation AUC", 
-                "Test Acc. (at last epoch/early stop)",
-                "Test AUC (at last epoch/early stop)"])
+                "Test Acc. (model with best val. acc.)",
+                "Test AUC (model with best val. acc.)"])
     plt.show()
 
 def run_classifier_pipeline(name, info_flags, imported_data,
@@ -247,7 +253,8 @@ def run_classifier_pipeline(name, info_flags, imported_data,
     clf.test_accuracy, clf.test_AUC = clf.test(
         test_loader=imported_data[4], 
         label_names=info["label"].values(), 
-        display_confusion_matrix=True
+        display_confusion_matrix=True,
+        use_best_model=True
     )
     print_accuracy_convergence(clf.train_accuracy_per_epoch, clf.val_accuracy_per_epoch,
                                clf.val_AUC_per_epoch, clf.test_accuracy, clf.test_AUC) 
