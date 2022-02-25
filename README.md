@@ -2,15 +2,11 @@
 
 ## Overview
 
-This project tries to evaluate the quality of generative models for data augmentation in the medical domain. 
-
-Data augmentation will be relying on geometric data augmentation, (variational) auto-encoder (e.g. stacked denoising, denoising auto-encoder, etc.), and generative adversarial neural networks (e.g. GAN, DCGAN, Wasserstein GAN, etc.) for instance.
-
-We will restrict ourself to three kind of models to generate new data and evaluate the (possible) improvement with regards to a final classification score (i.e. comparing results between augmented and non-augmented training sets). 
+We evaluate the impact of data augmentation on the performance of a Convolutional Neural Network on 8 medical datasets ([MedMNIST](https://medmnist.com/) benchmark). We demonstrate accuracy improvements on 7 of the datasets when using either Geometric or Deep Learning data augmentation methods (Conditional VAE, Joint VAE, Conditional GAN).
 
 ## Datasets
 
-We will look into applying the above project on some (if not all) of the following datasets from the MedMNIST Classification Decathlon (https://medmnist.github.io/):
+We will look into applying the above project on some (if not all) of the following datasets from the MedMNIST Classification benchmark (https://medmnist.github.io/):
 
 | Dataset | Classification Type | Train size | Validation size | Test size |
 | :--- | :--- | :---: | :---: | :---: |  
@@ -23,10 +19,6 @@ We will look into applying the above project on some (if not all) of the followi
 | OragnMNIST_Coronal Abdominal CT | Multi-Class (11) |13,000 | 2,392 | 8,268 |
 | OrganMNIST_Sagittal Abdominal CT | Multi-Class (11) | 13,940 | 2,452 | 8,829 |
 
-## Notes
-
-We will also provide a short report explaining the choice of VAE, AE, and/or GAN models, outlining differences between datasets' results. We will also try to interprete and justify possible differences with regards to models, data specifications, visual features, and bibliography references used to support the choices made.
-
 ## Google Colab
 
-The code is available as a self-hosted, unique Google Colab Notebook accessible [here](https://drive.google.com/file/d/1RaOwW-o3fSPN5VnCMrga0zsOfYLUPql_/view?usp=sharing).
+The code is available as a self-hosted, stand-alone Google Colab Notebook accessible [here](https://colab.research.google.com/drive/1J64flVq0ALWS7JBd8hj5qF1bwdbHlmeR?usp=sharing).
